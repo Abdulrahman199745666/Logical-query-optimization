@@ -1,0 +1,288 @@
+package tableau;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class Tableau {
+private List<ArrayList<Variable>> tableau;// Tableau Inhalte
+private List<String> attributes;// A, B, C, D
+private List<String> conditions;// Tableau Bedingungen
+private List<String> tags;// Tableau Tags
+private List<Relation> relations;
+private List<String> projections;
+private static int counter;
+
+
+
+//public int getCounter() {
+//return counter;
+//}
+
+//public void setTags(List<String> tags) {
+//this.tags = tags;
+//}
+public List<String> getAttributes() {
+return attributes;
+}
+
+public void setAttributes(List<String> attribute) {
+this.attributes = attribute;
+}
+
+public List<String> getConditions() {
+return conditions;
+}
+
+public void setConditions(List<String> conditions) {
+this.conditions = conditions;
+}
+
+public List<ArrayList<Variable>> getTableau() {
+return tableau;
+}
+
+public void setTableau(List<ArrayList<Variable>> tableau2) {
+this.tableau = tableau2;
+}
+
+public List<String> getTags() {
+return tags;
+}
+
+public void setTags(List<String> tags) {
+this.tags = tags;
+}
+
+public List<Relation> getRelations() {
+return relations;
+}
+
+public void setRelations(List<Relation> relations) {
+this.relations = relations;
+}
+public List<String> getProjections() {
+return projections;
+}
+
+public void setProjections(List<String> projections) {
+this.projections = projections;
+}
+
+public Tableau(List<String> attributes, List<Relation> relations) {
+
+this.tableau = new ArrayList<ArrayList<Variable>>();
+this.tags = new ArrayList<String>();
+this.conditions = new ArrayList<String>();
+this.projections = new ArrayList<String>();
+this.relations = relations;
+this.attributes = attributes;
+for (int i = 0; i < this.attributes.size(); i++) {
+this.tableau.add(new ArrayList<Variable>());
+}
+}
+
+public static void main(String[] args) {
+// Tableau table = new Tableau();
+// table.setAttributes(new ArrayList<String>());
+// table.getAttributes().add("A");
+// table.getAttributes().add("B");
+// table.getAttributes().add("C");
+// table.getAttributes().add("D");
+// table.setTableau(new ArrayList<ArrayList<Variable>>());
+// for (int i = 0; i < table.getAttributes().size(); i++) {
+// table.getTableau().add(new ArrayList<Variable>());
+// }
+//
+// for (int i = 0; i < table.getTableau().size(); i++) {
+// table.getTableau().get(i).add(new Variable("a" + (i + 1), true));
+// }
+//
+// table.getTableau().get(0).add(new Variable("a1", true));
+// table.getTableau().get(1).add(new Variable("a2", true));
+// table.getTableau().get(2).add(new Variable("b1", false));
+// table.getTableau().get(3).add(new Variable("b2", false));
+//
+// table.getTableau().get(0).add(new Variable("a1", true));
+// table.getTableau().get(1).add(new Variable("b3", false));
+// table.getTableau().get(2).add(new Variable("a3", true));
+// table.getTableau().get(3).add(new Variable("b4", false));
+//
+// table.getTableau().get(0).add(new Variable("b5", false));
+// table.getTableau().get(1).add(new Variable("a2", true));
+// table.getTableau().get(2).add(new Variable("a3", true));
+// table.getTableau().get(3).add(new Variable("a4", true));
+//
+// 
+// table.getTags().add("R1");
+// table.getTags().add("R3");
+// table.getTags().add("R2");
+//
+// table.setConditions(new ArrayList<String>());
+// table.getConditions().add("b1 == a3(w3)");
+//
+// table.getTags().set(1, "R2");
+// table.getTags().set(2, "R3");
+//
+// table.setVariable(3, 3, new Variable("b6", false));
+//
+// table.deleteRow(1);
+//
+// table.printTableau();
+// table.printConditions();
+// table.printAttributes();
+
+}
+
+public void setVariable(int spalte, int zeile, Variable variable) {
+tableau.get(spalte).set(zeile, variable);
+}
+
+public void printAttributes() {
+for (int i = 0; i < attributes.size(); i++) {
+if (i == attributes.size() - 1) {
+System.out.print(attributes.get(i));
+} else
+System.out.print(attributes.get(i) + ", ");
+}
+System.out.println();
+}
+
+public void printConditions() {
+for (int i = 0; i < conditions.size(); i++) {
+if (i == conditions.size() - 1) {
+System.out.print(conditions.get(i));
+} else
+System.out.print(conditions.get(i) + ", ");
+}
+System.out.println();
+}
+public void printProjections() {
+for (int i = 0; i < projections.size(); i++) {
+if (i == projections.size() - 1) {
+System.out.print(projections.get(i));
+} else
+System.out.print(projections.get(i) + ", ");
+}
+System.out.println();
+}
+
+public void printTableau() {
+System.out.print("   | ");
+for (String att : attributes) {
+System.out.print(att + "  | ");
+}
+System.out.print("Tags");
+System.out.println();
+System.out.println("----------------------------");
+for (int i = 0; i < tableau.get(0).size(); i++) {
+System.out.print("w" + i + " | ");
+for (int j = 0; j < tableau.size(); j++) {
+if (!(j == tableau.size() - 1 && i == 0)) {
+if (tableau.get(j).get(i).getValue().equals("blank")) {
+System.out.print("   | ");
+} else
+System.out.print(tableau.get(j).get(i).getValue() + " | ");
+} else {
+if (tableau.get(j).get(i).getValue().equals("blank")) {
+} else
+System.out.print(tableau.get(j).get(i).getValue());
+}
+}
+if (i != 0) {
+try {
+System.out.print("(" + tags.get(i - 1) + ")");
+} catch (Exception e) {
+}
+}
+
+System.out.println();
+System.out.println("----------------------------");
+}
+
+}
+
+public Tableau copyTableau() {
+List<String> atrribList = new ArrayList<String>(attributes);
+List<Relation> relationsList = new ArrayList<Relation>(relations);
+Tableau table = new Tableau(atrribList, relationsList);
+for (int i = 0; i < table.getTableau().size(); i++) {
+table.getTableau().set(i, new ArrayList<Variable>(tableau.get(i)));
+}
+table.setConditions(new ArrayList<String>(conditions));
+table.setRelations(new ArrayList<Relation>(relations));
+table.setProjections(new ArrayList<String>(projections));
+table.setTags(new ArrayList<String>(tags));
+return table;
+}
+public static String getContent(int bracketIndex, String subquery) {
+int openBrackets = 1;
+String content = "";
+for (int i = bracketIndex; i < subquery.length(); i++) {
+if (subquery.charAt(i) == ('(')) {
+openBrackets++;
+} else if (subquery.charAt(i) == (')')) {
+openBrackets--;
+}
+
+if (openBrackets == 0) {
+content = subquery.substring(bracketIndex, i);
+return content;
+}
+}
+return null;
+}
+
+public void deleteRow(int row) {
+for(String condition: conditions) {
+
+if(condition.indexOf("w") != condition.lastIndexOf("w")) {
+String content = getContent(condition.indexOf("(") + 1, condition);
+int index1 = Integer.parseInt(content.substring(content.indexOf("w")+1, content.indexOf(",")));
+int index2 = Integer.parseInt(content.substring(content.lastIndexOf("w")+1));
+String newCondition = condition;
+if(index1>row) {
+newCondition = newCondition.replaceAll("w"+index1+",", "w"+(index1-1)+",");
+}
+if(index2>row) {
+newCondition = newCondition.replaceAll(",w"+index2, ",w"+(index2-1));
+}
+conditions.set(conditions.indexOf(condition), newCondition);
+}else {
+int index = Integer.valueOf(condition.substring(condition.indexOf("w")+1,condition.indexOf(")")));
+if(index>row) {
+String newCondition = condition.replaceAll("w"+index, "w"+(index-1));
+conditions.set(conditions.indexOf(condition), newCondition);
+}
+}
+}
+for(String projection: projections) {
+
+if(projection.indexOf("w") != projection.lastIndexOf("w")) {
+String content = getContent(projection.indexOf("(") + 1, projection);
+int index1 = Integer.parseInt(content.substring(content.indexOf("w")+1, content.indexOf(",")));
+int index2 = Integer.parseInt(content.substring(content.lastIndexOf("w")+1));
+String newProjection = projection;
+if(index1>row) {
+newProjection = newProjection.replaceAll("w"+index1+",", "w"+(index1-1)+",");
+}
+if(index2>row) {
+newProjection = newProjection.replaceAll(",w"+index2, ",w"+(index2-1));
+}
+projections.set(projections.indexOf(projection), newProjection);
+}else {
+int index = Integer.valueOf(projection.substring(projection.indexOf("w")+1,projection.indexOf(")")));
+if(index>row) {
+String newCondition = projection.replaceAll("w"+index, "w"+(index-1));
+projections.set(projections.indexOf(projection), newCondition);
+}
+}
+}
+for (int i = 0; i < tableau.size(); i++) {
+tableau.get(i).remove(row);
+}
+if(row !=0) {
+tags.remove(row - 1);
+}
+}
+
+}

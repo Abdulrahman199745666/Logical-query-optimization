@@ -1,0 +1,29 @@
+package tableau;
+
+
+public class Variable {
+	private String value;
+	private boolean ausgezeichnet;
+
+	public Variable(String value, boolean ausgezeichnet) {
+		this.value = value;
+		this.ausgezeichnet = ausgezeichnet;
+	}
+
+	public String getValue() {
+		return value;
+	}
+
+	public void setValue(String value) {
+		this.value = value;
+	}
+
+	public boolean isAusgezeichnet() {
+		return ausgezeichnet;
+	}
+
+	public void setAusgezeichnet(boolean ausgezeichnet) {
+		this.ausgezeichnet = ausgezeichnet;
+	}
+
+}

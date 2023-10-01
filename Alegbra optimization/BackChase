@@ -1,0 +1,465 @@
+package tableau;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.locks.Condition;
+
+public class BackChase {
+
+/**
+* Die Methode transformiert ein optimiertes Tableau zu einer optimierten
+* relational algabrische Anfrage mit folgenden Schritten: 1. Rufe die Methode
+* getResultProjection auf. 2. Prüfe, ob das Tableau überlappende Bedingungen
+* enthält und merke die Zeilen(rufe die Methode getOverlappingConditions) 3.
+* Prüfe, ob w1 das Start einer überlappende Bedingungen entspricht und
+* trasformiere es zu eine Selektion-Operator 3. Rufe die Methode translateRow
+* auf die erste Zeile (w1) 4. Solange noch Zeilen gibt, nehme Rücksicht in der
+* nächsten Zeile auf die überlappende Bedingungen und dann rufe die Methode
+* translateRow auf die nächste Zeile und verbinde es mit den vorherigen Zeilen
+* 
+* 
+* @param table Ein optimierte Tableau unter Berücksichtigung von
+*              Integritätsbedingungen
+* @return Liefert eine optimierte relational algebrische Anfrage, die das
+*         eingegebene Tableau entspricht
+*/
+public static String backChase(Tableau table) {
+String resultQuery = "";
+fixProjections(table);
+List<OverlapingCondition> conditions = getOverlappingConditions(table);
+List<QElement> elements = new ArrayList<QElement>();
+for (OverlapingCondition condition : conditions) {
+table.getConditions().remove(condition.getOriginalCondition());
+}
+
+for (int i = 1; i < table.getTableau().get(0).size(); i++) {
+elements.add(new QElement(translateRow(table, i), false, 0));
+}
+elements = addOCs(elements, conditions);
+elements = addProjections(elements, table);
+resultQuery = listToString(elements);
+resultQuery = getResultProjection(table) + "(" + resultQuery + ")";
+//System.out.println(resultQuery);
+return removeUnessesryProjection(resultQuery, table.getRelations());
+}
+
+private static void fixProjections(Tableau table) {
+	//System.out.println(table.getProjections().get(1));
+	List<String> tahseen = new ArrayList<String>(table.getProjections());
+for(String projection : tahseen) {
+if(projection.indexOf("w")!=projection.lastIndexOf("w")) {
+int start = Integer.valueOf(projection.substring(projection.indexOf("w")+1, projection.indexOf(",")));
+int end = Integer.valueOf(projection.substring(projection.lastIndexOf("w")+1, projection.indexOf(")")));
+if(end == start) {
+String newProjection = projection.substring(0, projection.indexOf(",")) + ")";
+table.getProjections().remove(projection);
+table.getProjections().add(newProjection);
+}
+}
+}
+}
+
+private static List<QElement> addProjections(List<QElement> elements, Tableau table) {
+for(String pro: table.getProjections()) {
+if(pro.indexOf("w")!=pro.lastIndexOf("w")) {
+int start = Integer.valueOf(pro.substring(pro.indexOf("w")+1, pro.indexOf(",")));
+int end = Integer.valueOf(pro.substring(pro.lastIndexOf("w")+1, pro.indexOf(")"))); 
+int count = 2;
+int index = 0;
+for(QElement element : elements) {
+if(!element.isSelect()) {
+if(count> start) {
+index = elements.indexOf(element);
+//System.out.println(index);
+break;
+}else count ++;
+}
+
+}elements.add(index, new QElement("project"+ pro.substring(0, pro.indexOf("("))+"(", true, 0));
+count = 1;
+
+for (QElement element : elements) {
+if(!element.isSelect()) {
+if(count == end) {
+index = elements.indexOf(element);
+
+break;
+}else count ++;
+}
+}
+elements.get(index).setEnds(elements.get(end - 1).getEnds() + 1);
+}
+}
+return elements;
+}
+
+private static String listToString(List<QElement> elements) {
+String resultQuery = "";
+for (QElement element : elements) {
+if (isLastRelation(element, elements)) {
+if(isFirstRelation(element, elements)) {
+resultQuery += element.getValue();
+}else resultQuery += "," + element.getValue();
+for (int i = 0; i < numberOfRelations(elements) - 1; i++) {
+resultQuery += ")";
+}
+} else if (!element.isSelect() && elements.indexOf(element) < elements.size() - 1) {
+if (isFirstRelation(element, elements) || elements.get(elements.indexOf(element) - 1).isSelect()) {
+resultQuery += "join(";
+}else 
+resultQuery += ",join(";
+resultQuery += element.getValue();
+} else {
+if (elements.indexOf(element) > 0 && !elements.get(elements.indexOf(element) - 1).isSelect()) {
+resultQuery += ",";
+}
+resultQuery += element.getValue();
+}
+
+if (element.getEnds() > 0) {
+for (int i = 0; i < element.getEnds(); i++) {
+resultQuery += ")";
+}
+}
+}
+return resultQuery;
+}
+
+private static int numberOfRelations(List<QElement> elements) {
+int numberOfRelations = 0;
+for (QElement element : elements) {
+if (!element.isSelect()) {
+numberOfRelations++;
+}
+}
+return numberOfRelations;
+}
+
+private static boolean isLastRelation(QElement element, List<QElement> elements) {
+int index = elements.indexOf(element);
+if(index == elements.size()-1) {
+return true;
+}else return false;
+}
+
+private static boolean isFirstRelation(QElement element, List<QElement> elements) {
+int index = elements.indexOf(element);
+for (int i = 0; i < index; i++) {
+if (!elements.get(i).isSelect()) {
+return false;
+}
+}
+return true;
+}
+
+private static List<QElement> addOCs(List<QElement> elements, List<OverlapingCondition> conditions) {
+for (OverlapingCondition condition : conditions) {
+String conditionString = "";
+if (condition.getOperator().equals("or")) {
+conditionString = "Select" + condition.getRightSide() + "(";
+} else
+conditionString = "Select" + condition.getLeftSide() + condition.getOperator()
++ condition.getRightSide() + "(";
+int count = 1;
+int index = 0;
+for(QElement element : elements) {
+if(!element.isSelect()) {
+if(count> condition.getStartRow()) {
+index = elements.indexOf(element);
+break;
+}else count ++;
+}
+}
+elements.add(index, new QElement(conditionString, true, 0));
+int endIndex = condition.getEndRow();
+count = 1;
+for (QElement element : elements) {
+if(!element.isSelect()) {
+if(count == endIndex) {
+index = elements.indexOf(element);
+break;
+}else count ++;
+}
+}
+elements.get(index).setEnds(elements.get(endIndex - 1).getEnds() + 1);
+}
+return elements;
+}
+
+/**
+* @param table Ein optimiertes Tableau
+* @return Liefert das Endprojektion in der Form(Project ABC )
+*/
+public static String getResultProjection(Tableau table) {
+String project = "Project ";
+for (int i = 0; i < table.getTableau().size(); i++) {
+if (!table.getTableau().get(i).get(0).getValue().equals("blank")) {
+project += table.getAttributes().get(i);
+}
+}
+
+return project;
+}
+
+/**
+* Übersetzung der Zeile aus dem Tableau mit dem folgenden Schritten: 1.
+* Extrahiere die betroffene Relation aus dem Tags mit der eingegbene
+* Zeilenummer 2. Prüfe, ob die Zeile eine Konstante enthält und transformiere
+* die zu einer Selektion-Operator 3. Prüfe, ob das Tableau Bedingungen
+* bezüglich der Zeile enthält und transformiere sie zur Selektion-Operatoren
+* 
+* @param table    Ein optimiertes Tableau
+* @param rowIndex Die Zielenummer
+* @return Liefert die Übersetzung der Zeile aus dem Tableau mit dem
+*         eingegebenen Zeilenummer
+*/
+public static String translateRow(Tableau table, int rowIndex) {
+String resultQuery = "";
+String tag = table.getTags().get(rowIndex - 1);
+resultQuery = tag;
+int[] consIndex = containsConstant(table, rowIndex);
+if (consIndex != null) {
+
+for (int i = 0; i < consIndex.length; i++) {
+resultQuery = "Select" + table.getAttributes().get(consIndex[i]) + "="
++ table.getTableau().get(consIndex[i]).get(rowIndex).getValue() + "(" + resultQuery + ")";
+}
+}
+
+for (String condition : table.getConditions()) {
+if (condition.contains("w" + rowIndex)) {
+resultQuery = getSelect(table, condition, rowIndex) + "(" + resultQuery + ")";
+}
+}
+for(String projection : table.getProjections()) {
+if(projection.indexOf("w")==projection.lastIndexOf("w")) {
+if(projection.contains("w"+rowIndex)) {
+resultQuery = "project" + projection.substring(0,projection.indexOf("(")) + "(" + resultQuery + ")";
+}
+}
+}
+return resultQuery;
+}
+
+/**
+* Prüfe, ob jede Bedingung im Tableau mehrere Zeilen betrifft
+* 
+* @param table Ein optimiertes Tableau
+* @return Liefert eine Liste aller Bedingungen, die mehreren Zeilen betreffen
+*/
+private static List<OverlapingCondition> getOverlappingConditions(Tableau table) {
+List<OverlapingCondition> conditions = new ArrayList<OverlapingCondition>();
+for (String condition : table.getConditions()) {
+if (condition.indexOf("w") != condition.lastIndexOf("w")) {
+if (condition.contains("or")) {
+int begin = Integer
+.valueOf(condition.substring(condition.indexOf("w") + 1, condition.indexOf(",")));
+;
+int end = Integer
+.valueOf(condition.substring(condition.lastIndexOf("w") + 1, condition.indexOf(")")));
+conditions.add(new OverlapingCondition(begin, end, null,
+condition.substring(0, condition.indexOf("(")), "or", condition));
+} else {
+String operator = getOperator(condition);
+String leftSide = condition.substring(0, condition.indexOf(operator));
+String rightSide = condition.substring(leftSide.length() + operator.length(),
+condition.indexOf("("));
+int leftAttRow = Integer
+.valueOf(condition.substring(condition.indexOf("w") + 1, condition.indexOf(",")));
+int rightAttRow = Integer
+.valueOf(condition.substring(condition.lastIndexOf("w") + 1, condition.indexOf(")")));
+for (int i = 0; i < table.getTableau().size(); i++) {
+if (table.getTableau().get(i).get(leftAttRow).getValue().equals(leftSide)) {
+leftSide = table.getAttributes().get(i);
+} else if (table.getTableau().get(i).get(rightAttRow).getValue().equals(rightSide)) {
+rightSide = table.getAttributes().get(i);
+}
+}
+conditions.add(
+new OverlapingCondition(leftAttRow, rightAttRow, leftSide, rightSide, operator, condition));
+}
+}
+}
+return conditions;
+}
+
+private static int[] containsConstant(Tableau table, int rowIndex) {
+int constantsCount = 0;
+for (int i = 0; i < table.getTableau().size(); i++) {
+String varValue = table.getTableau().get(i).get(rowIndex).getValue();
+if (isNumber(varValue)) {
+constantsCount++;
+}
+}
+
+if (constantsCount > 0) {
+int[] constants = new int[constantsCount];
+int index = 0;
+for (int i = 0; i < table.getTableau().size(); i++) {
+String varValue = table.getTableau().get(i).get(rowIndex).getValue();
+if (isNumber(varValue)) {
+constants[index++] = i;
+}
+}
+return constants;
+} else
+return null;
+}
+
+public static boolean isNumber(String str) {
+try {
+Double.parseDouble(str);
+return true;
+} catch (NumberFormatException e) {
+return false;
+}
+}
+
+private static String getSelect(Tableau table, String condition, int rowIndex) {
+String select = "Select ";
+if (condition.contains("or")) {
+
+return select + condition.substring(0, condition.indexOf("("));
+}
+String operator = getOperator(condition);
+String leftSide = condition.substring(0, condition.indexOf(operator));
+String rightSide = condition.substring(leftSide.length() + operator.length(), condition.indexOf("("));
+for (int i = 0; i < table.getTableau().size(); i++) {
+if (table.getTableau().get(i).get(rowIndex).getValue().equals(leftSide)) {
+leftSide = table.getAttributes().get(i);
+break;
+}
+}
+for (int i = 0; i < table.getTableau().size(); i++) {
+if (table.getTableau().get(i).get(rowIndex).getValue().equals(rightSide)) {
+rightSide = table.getAttributes().get(i);
+break;
+}
+}
+select = select + leftSide + operator + rightSide;
+return select;
+}
+
+private static String getOperator(String condition) {
+if (condition.contains("<=")) {
+return "<=";
+} else if (condition.contains(">=")) {
+return ">=";
+} else if (condition.contains("<")) {
+return "<";
+} else if (condition.contains(">")) {
+return ">";
+} else if (condition.contains("!=")) {
+return "!=";
+} else
+return "=";
+
+}
+
+public static List<String> getInnerAttributes(String query, List<Relation> relations,
+List<String> knownAttributes) {
+QueryOptimizer qo = new QueryOptimizer();
+List<String> attributes = new ArrayList<String>();
+if (knownAttributes != null) {
+attributes = knownAttributes;
+}
+if (qo.isRelation(query)) {
+for (Relation relation : relations) {
+if (relation.getName().equals(query)) {
+for (String att : relation.getAttributes()) {
+if (!attributes.contains(att)) {
+attributes.add(att);
+}
+}
+
+}
+}
+} else if (qo.isSelect(query) || qo.isProject(query)) {
+attributes = (getInnerAttributes(qo.getContent(query.indexOf("(") + 1, query), relations, attributes));
+} else {
+String leftside = qo.getLeftside(qo.getContent(query.indexOf("(") + 1, query));
+String rightside = qo.getContent(query.indexOf("(") + 1, query).substring(leftside.length() + 1);
+attributes = (getInnerAttributes(leftside, relations, attributes));
+attributes = (getInnerAttributes(rightside, relations, attributes));
+}
+return attributes;
+}
+
+public static String removeUnessesryProjection(String query, List<Relation> relations) {
+String resultQurey = query;
+List<String> projectAtt = new ArrayList<String>();
+projectAtt = stringToList(query.substring(query.indexOf("ect") + 3, query.indexOf("(")));
+List<String> innerAttributes = getInnerAttributes(query, relations, relations.get(0).getUniverse());
+boolean checkEquality = true;
+for (String att : innerAttributes) {
+if (!projectAtt.contains(att)) {
+checkEquality = false;
+break;
+}
+}
+
+if (checkEquality) {
+resultQurey = query.substring(query.indexOf("(") + 1, query.lastIndexOf(")"));
+}
+
+return resultQurey;
+}
+
+private static List<String> stringToList(String input) {
+List<String> charList = new ArrayList<>();
+
+for (int i = 0; i < input.length(); i++) {
+charList.add(String.valueOf(input.charAt(i)));
+}
+return charList;
+}
+
+// ProjectBD(join(join(R1,R2)),R3))
+// for (int i = 1; i < table.getTableau().get(0).size(); i++) {
+// if (i > 1) {
+// if (!inBetween) {
+// if (start != 0) {
+// if (start == i) {
+// inBetween = true;
+// if(conditions.get(0).getOperator().equals("or")) {
+// 
+// resultQuery = "Select" + conditions.get(0).getRightSide() + "(join(" + resultQuery + ","
+// + translateRow(table, i) + ")";
+// translateRow(table, i);
+// }else {
+// resultQuery = "Select" + conditions.get(0).getLeftSide() + conditions.get(0).getOperator()
+// + conditions.get(0).getRightSide() + "(join(" + resultQuery + ","
+// + translateRow(table, i) + ")";
+// translateRow(table, i);}
+// }
+// }else resultQuery = "join(" + resultQuery+ "," + translateRow(table, i) +")";
+// } else if (i == end) {
+// String select = resultQuery.substring(0,resultQuery.indexOf("(")+1);
+// 
+// resultQuery = select + "join(" + resultQuery.substring(select.length()) + "," + translateRow(table, i) + "))";
+// 
+// inBetween = false;
+// conditions.remove(0);
+// if (conditions.size() > 0) {
+// start = conditions.get(0).getStartRow();
+// end = conditions.get(0).getEndRow();
+// } else {
+// start = 0;
+// end = 0;
+// }
+// } else {
+// String select = resultQuery.substring(0,resultQuery.indexOf("(")+1);
+// resultQuery = select + "join(" + resultQuery.substring(select.length()) + "," + translateRow(table, i) + ")";}
+// } else if (start == 1) {
+// inBetween = true;
+// if(conditions.get(0).getOperator().equals("or")) {
+// resultQuery = "Select" + conditions.get(0).getRightSide()+ "(" + translateRow(table, i);
+// 
+// }else {
+// resultQuery = "Select" + conditions.get(0).getLeftSide() + conditions.get(0).getOperator()
+// + conditions.get(0).getRightSide() + "(" + translateRow(table, i);
+// }
+// } else resultQuery = translateRow(table, i);}
+}
+
+

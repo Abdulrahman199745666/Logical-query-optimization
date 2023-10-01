@@ -1,0 +1,836 @@
+package tableau;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class qt {
+public static int counter = 1;
+
+public int getCounter() {
+return counter;
+}
+
+public void setCounter(int counter) {
+this.counter = counter;
+}
+
+private static String getComplexOperator(String query) {
+if (query.contains("Unify")) {
+return "Unify";
+} else if (query.contains("unify")) {
+return "unify";
+} else if (query.contains("difference")) {
+return "difference";
+} else if (query.contains("Difference")) {
+return "Difference";
+}
+return "";
+}
+
+/**
+* Die Methode transformiert eine relational algabrische Anfrage zu Tableaus,
+* falls die Anfrage einen Komplex-Operator enthält, sonst wird die Anfrage zu
+* einem einzigen Tableau transformiert. und ruft die Methode
+* translateSimpleQuery
+* 
+* 
+* @param query:     Von Benutzer eingegebene relational algabrische Anfrage
+* @param relations: Ist die Liste aller in Universum enthaltenen Relationen
+* @return Liefert eine Liste von Tableaus zu der eingegebene Anfrage zurück
+*/
+public static List<Tableau> translateQuery(String query, List<Relation> relations) {
+List<Tableau> tableaus = new ArrayList<Tableau>();
+if (!getComplexOperator(query).equals("")) {
+String operatorContent = getContent(query.indexOf("(") + 1, query);
+String leftSide = getLeftside(operatorContent);
+String rightSide = operatorContent.substring(leftSide.length() + 1);
+tableaus.add(translateSimpleQuery(leftSide, relations));
+tableaus.add(translateSimpleQuery(rightSide, relations));
+} else {
+tableaus.add(translateSimpleQuery(query, relations));
+}
+for(Tableau tableau: tableaus) {
+String pro = tableau.getProjections().get(tableau.getProjections().size()-1);
+if(isEndPro(pro, tableau)) {
+tableau.getProjections().remove(pro);
+}
+}
+
+return tableaus;
+}
+
+private static boolean isEndPro(String pro, Tableau tableau) {
+if(pro.indexOf("w")!=pro.lastIndexOf("w")) {
+int index1 = Integer.valueOf(pro.substring(pro.indexOf("w")+1, pro.indexOf(",")));
+int index2 = Integer.valueOf(pro.substring(pro.lastIndexOf("w")+1, pro.indexOf(")")));
+if(index1 == 1 && index2 == tableau.getTableau().get(0).size()-1) {
+return true;
+}else return false;
+}else return false;
+}
+
+/**
+* Die Methode transformiert eine relational algabrische Anfrage zu einem
+* Tableau mit folgenden Schritten:
+* 1. Falls die eingegebene Anfrage eine Relation ist, rufe die Methode relationToTableau auf.
+* 2. Falls die eingegebene Anfrage mit einem Selektion-Operator anfängt, rufe die Methode
+* selectTableaus auf und rufe die Methode rukursiv auf das Inhalt der Selektion-Operator auf.
+* 3. Falls die eingegebene Anfrage mit einem Projktion-Operator anfängt, rufe die Methode
+* projectTableaus auf und rufe die Methode rukursiv auf das Inhalt der Projktion-Operator auf.
+* 4. Falls die eingegebene Anfrage mit einem Verbund-Operator anfängt, rufe die Methode
+* joinTableaus auf und rufe die Methode rukursiv auf beiden Seiten der Verbund-Operator auf.
+* 
+* @param query:     Von Benutzer eingegebene relational algabrische Anfrage
+* @param relations: Ist die Liste aller in Universum enthaltenen Relationen
+* @return Liefert ein Tableau zu der eingegebene Anfrage zurück
+*/
+public static Tableau translateSimpleQuery(String query, List<Relation> relations) {
+if (isRelation(query)) {
+for (Relation relation : relations) {
+if (relation.getName().equals(query)) {
+return relationToTableau(relation, relation.getUniverse(), relations);
+
+}
+}
+} else if (isSelect(query)) {
+String selectContent = getContent(query.indexOf("(") + 1, query);
+String selectConditions = query.substring(query.indexOf("t") + 1, query.indexOf("("));
+return selectTableaus(translateSimpleQuery(selectContent, relations), selectConditions);
+} else if (isProject(query)) {
+String projectContent = getContent(query.indexOf("(") + 1, query);
+List<String> project = new ArrayList<String>();
+for (int i = query.indexOf("t") + 1; i < query.indexOf("("); i++) {
+project.add(Character.toString(query.charAt(i)));
+}
+return projectTableaus(translateSimpleQuery(projectContent, relations), project);
+} else if (isJoin(query)) {
+String joinContent = getContent(query.indexOf("(") + 1, query);
+String leftSide = getLeftside(joinContent);
+String rightSide = joinContent.substring(leftSide.length() + 1);
+return joinTableaus(translateSimpleQuery(leftSide, relations), translateSimpleQuery(rightSide, relations));
+}
+
+return null;
+}
+
+private static boolean isJoin(String query) {
+String lowerCaseQuery = query.toLowerCase();
+if (lowerCaseQuery.substring(0, lowerCaseQuery.indexOf("(")).contains("join")) {
+return true;
+}
+return false;
+}
+
+private static boolean isProject(String query) {
+String lowerCaseQuery = query.toLowerCase();
+if (lowerCaseQuery.substring(0, lowerCaseQuery.indexOf("(")).contains("project")) {
+return true;
+}
+return false;
+}
+
+private static boolean isSelect(String query) {
+String lowerCaseQuery = query.toLowerCase();
+if (lowerCaseQuery.substring(0, lowerCaseQuery.indexOf("(")).contains("select")) {
+return true;
+}
+return false;
+}
+
+private static boolean isRelation(String query) {
+List<String> operators = new ArrayList<String>();
+operators.add("select");
+operators.add("project");
+operators.add("join");
+operators.add("unify");
+operators.add("difference");
+String lowerCaseQuery = query.toLowerCase();
+
+for (String operator : operators) {
+if (lowerCaseQuery.contains(operator)) {
+return false;
+}
+}
+return true;
+}
+
+/**
+* @param relation Eine Relation aus dem Universum
+* @param attributes Eine Liste der Relation-Attribute
+* @param relations: Ist die Liste aller in Universum enthaltenen Relationen
+* @return Liefert ein Tableau zu der eingegebene Relation zurück
+*/
+public static Tableau relationToTableau(Relation relation, List<String> attributes, List<Relation> relations) {
+Tableau table = new Tableau(attributes, relations);
+table.setAttributes(relation.getUniverse());
+for (int i = 0; i < table.getAttributes().size(); i++) {
+if (relation.getAttributes().contains(attributes.get(i))) {
+table.getTableau().get(i).add(new Variable("a" + (i + 1), true));
+} else
+table.getTableau().get(i).add(new Variable("blank", false));
+
+}
+for (int i = 0; i < table.getAttributes().size(); i++) {
+if (relation.getAttributes().contains(attributes.get(i))) {
+table.getTableau().get(i).add(new Variable("a" + (i + 1), true));
+} else {
+table.getTableau().get(i).add(new Variable("blank", false));
+
+}
+}
+table.getTags().add(relation.getName());
+return table;
+}
+
+/**
+* @param tableau1 Entspricht der linke Seite der Verbund-Operator
+* @param tableau2 Entspricht der rechte Seite der Verbund-Operator
+* @return Liefert eine resultierende Tableau aus dem Verbund von (tableau1, tableau2)
+*/
+public static Tableau joinTableaus(Tableau tableau1, Tableau tableau2) {
+Tableau table = new Tableau(tableau1.getAttributes(), tableau1.getRelations());
+List<String> conditions = tableau1.getConditions();
+List<String> projections= tableau1.getProjections();
+int size = tableau1.getTableau().get(0).size() - 1;
+for (int i = 0; i < tableau2.getConditions().size(); i++) {
+if (tableau2.getConditions().get(i).indexOf("w") != tableau2.getConditions().get(i).lastIndexOf("w")) {
+if(tableau2.getConditions().get(i).contains("or")) {
+String leftSide = tableau2.getConditions().get(i).substring(0,tableau2.getConditions().get(i).indexOf("w")+1);
+int begin = Integer.valueOf(tableau2.getConditions().get(i).substring(tableau2.getConditions().get(i).indexOf("w")+1, tableau2.getConditions().get(i).indexOf(",")));
+int end = Integer.valueOf(tableau2.getConditions().get(i).substring(tableau2.getConditions().get(i).lastIndexOf("w")+1,tableau2.getConditions().get(i).indexOf(")") ));
+String newCondition = leftSide + (begin+1) + ",w"+(end+1)+")";
+tableau2.getConditions().set(i, newCondition);
+}else {
+String content = getContent(tableau2.getConditions().get(i).indexOf("(") + 1,
+tableau2.getConditions().get(i));
+int index1 = Integer.parseInt(content.substring(content.indexOf("w") + 1, content.indexOf(",")));
+int index2 = Integer.parseInt(content.substring(content.lastIndexOf("w") + 1));
+int newIndex1 = index1 + size;
+int newIndex2 = index2 + size;
+String newCondition = tableau2.getConditions().get(i).replaceAll("w" + index1, "w" + newIndex1);
+newCondition = newCondition.replaceAll(",w" + index2, ",w" + newIndex2);
+tableau2.getConditions().set(i, newCondition);
+}
+} else {
+int t = Integer.parseInt(
+getContent(tableau2.getConditions().get(i).indexOf("w") + 1, tableau2.getConditions().get(i)))
++ size;
+
+String Newcond = tableau2.getConditions().get(i).substring(0,
+tableau2.getConditions().get(i).indexOf("w") + 1) + t + ")";
+tableau2.getConditions().set(i, Newcond);
+}
+}
+for (int i = 0; i < tableau2.getProjections().size(); i++) {
+if (tableau2.getProjections().get(i).indexOf("w") != tableau2.getProjections().get(i).lastIndexOf("w")) {
+if(tableau2.getProjections().get(i).contains("or")) {
+String leftSide = tableau2.getProjections().get(i).substring(0,tableau2.getProjections().get(i).indexOf("w")+1);
+int begin = Integer.valueOf(tableau2.getProjections().get(i).substring(tableau2.getProjections().get(i).indexOf("w")+1, tableau2.getProjections().get(i).indexOf(",")));
+int end = Integer.valueOf(tableau2.getProjections().get(i).substring(tableau2.getProjections().get(i).lastIndexOf("w")+1,tableau2.getProjections().get(i).indexOf(")") ));
+String newProjection = leftSide + (begin+1) + ",w"+(end+1)+")";
+tableau2.getProjections().set(i, newProjection);
+}else {
+String content = getContent(tableau2.getProjections().get(i).indexOf("(") + 1,
+tableau2.getProjections().get(i));
+int index1 = Integer.parseInt(content.substring(content.indexOf("w") + 1, content.indexOf(",")));
+int index2 = Integer.parseInt(content.substring(content.lastIndexOf("w") + 1));
+int newIndex1 = index1 + size;
+int newIndex2 = index2 + size;
+String newProjection = tableau2.getProjections().get(i).replaceAll("w" + index1, "w" + newIndex1);
+newProjection = newProjection.replaceAll(",w" + index2, ",w" + newIndex2);
+tableau2.getProjections().set(i, newProjection);
+}
+} else {
+int t = Integer.parseInt(
+getContent(tableau2.getProjections().get(i).indexOf("w") + 1, tableau2.getProjections().get(i)))
++ size;
+
+String Newpro = tableau2.getProjections().get(i).substring(0,
+tableau2.getProjections().get(i).indexOf("w") + 1) + t + ")";
+tableau2.getProjections().set(i, Newpro);
+}
+}
+conditions.addAll(tableau2.getConditions());
+projections.addAll(tableau2.getProjections());
+table.setConditions(conditions);
+table.setProjections(projections);
+List<String> tags = tableau1.getTags();
+tags.addAll(tableau2.getTags());
+table.setTags(tags);
+for (int i = 0; i < table.getAttributes().size(); i++) {
+if (!tableau1.getTableau().get(i).get(0).getValue().equals("blank")) {
+table.getTableau().get(i).add(tableau1.getTableau().get(i).get(0));
+} else
+table.getTableau().get(i).add(tableau2.getTableau().get(i).get(0));
+}
+for (int i = 1; i < tableau1.getTableau().get(0).size(); i++) {
+for (int j = 0; j < table.getAttributes().size(); j++) {
+table.getTableau().get(j).add(tableau1.getTableau().get(j).get(i));
+}
+}
+for (int i = 1; i < tableau2.getTableau().get(0).size(); i++) {
+for (int j = 0; j < table.getAttributes().size(); j++) {
+table.getTableau().get(j).add(tableau2.getTableau().get(j).get(i));
+}
+}
+return table;
+}
+
+/**
+* @param tableau 
+* @param projection Liste der Projektion-Attribute
+* @return Liefert eine projektierende Tableau zurück
+*/
+public static Tableau projectTableaus(Tableau tableau, List<String> projection) {
+Tableau table = tableau;
+// for(int i = 1; i<table.getTableau().get(0).size(); i++) {
+// for(int j = 0; j<table.getTableau().size(); j++) {
+// if (!table.getTableau().get(j).get(i).isAusgezeichnet()) {
+// if (table.getTableau().get(j).get(i).getValue().contains("b")) {
+// boolean check = true;
+// for(String condition: table.getConditions()) {
+// if(condition.contains(table.getTableau().get(j).get(i).getValue())) {
+// check = false;
+// }
+// }
+// if(check) {
+// table.setVariable(j, i, new Variable("blank" , false));
+// }
+// }
+// }
+// }
+// }
+// 
+for (int i = 0; i < table.getAttributes().size(); i++) {
+if (!table.getTableau().get(i).get(0).getValue().equals("blank")
+&& !projection.contains(table.getAttributes().get(i))) {
+table.setVariable(i, 0, new Variable("blank", false));
+for (int j = 1; j < table.getTableau().get(0).size(); j++) {
+if (table.getTableau().get(i).get(j).isAusgezeichnet()) {
+if (table.getTableau().get(i).get(j).getValue().contains("a")) {
+table.setVariable(i, j, new Variable("b" + counter, false));
+String x = "w" + j;
+String a = "a" + (i + 1);
+table.getConditions().replaceAll(s -> s.contains(x) ? s.replaceAll(a, "b" + counter) : s);
+}
+}
+}
+counter++;
+}
+}
+String project = "";
+for(String att : projection) {
+project += att;
+}
+if(table.getTableau().get(0).size()>2) {
+table.getProjections().add(project + "(w1,w"+(table.getTableau().get(0).size()-1) +")");
+}else table.getProjections().add(project + "(w1)");
+return table;
+}
+
+/**
+* @param tableau 
+* @param condition Die Bedingung der Selektion-Operator
+* @return Liefert ein Tableau unter Berücksichtigung der eingegebenen Bedingung zurück
+*/
+public static Tableau selectTableaus(Tableau tableau, String condition) {
+
+Tableau table = tableau;
+if(condition.contains("or")) {
+String leftSel  = condition.substring(0, condition.indexOf("or"));
+String leftOperator = getOperator(leftSel);
+String rightSel = condition.substring(condition.indexOf("or")+2);
+String rightOperator= getOperator(rightSel);
+if(table.getTableau().get(0).size()>2) {
+table.getConditions().add(condition+"(w1, w"+ (table.getTableau().get(0).size()-1 )+")");
+}else table.getConditions().add(condition+"(w1)");
+}else {
+String operator = getOperator(condition);
+if (tableau.getAttributes().contains(condition.substring(condition.indexOf(operator) + operator.length()))) {
+String leftSide = condition.substring(0, condition.indexOf(operator));
+String rightSide = condition.substring(leftSide.length() + operator.length());
+int leftAtt = tableau.getAttributes().indexOf(leftSide);
+int rightAtt = tableau.getAttributes().indexOf(rightSide);
+int leftAttRow = 0;
+int rightAttRow = 0;
+
+if (table.getTableau().get(0).size() == 2) {
+leftSide = table.getTableau().get(leftAtt).get(1).getValue();
+rightSide = table.getTableau().get(rightAtt).get(1).getValue();
+table.getConditions().add(leftSide + operator + rightSide + "(w" + 1 + ")");
+} else {
+for (int i = 1; i < table.getTableau().get(0).size(); i++) {
+if (!table.getTableau().get(leftAtt).get(i).getValue().equals("blank")) {
+leftSide = table.getTableau().get(leftAtt).get(i).getValue();
+leftAttRow = i;
+} else if (!table.getTableau().get(rightAtt).get(i).getValue().equals("blank")) {
+rightSide = table.getTableau().get(rightAtt).get(i).getValue();
+rightAttRow = i;
+}
+}
+
+table.getConditions()
+.add(leftSide + operator + rightSide + "(w" + leftAttRow + ",w" + rightAttRow + ")");
+}
+} else {
+int column = table.getAttributes().indexOf(condition.substring(0, condition.indexOf(operator)));
+String rightSide = condition.substring(condition.indexOf(operator) + operator.length());
+if (condition.contains("<") || condition.contains(">")) {
+if (table.getAttributes().contains(rightSide)) {
+int column2 = table.getAttributes().indexOf(rightSide);
+
+for (int i = 1; i < table.getTableau().get(0).size(); i++) {
+table.getConditions().add(table.getTableau().get(column).get(i).getValue() + operator
++ table.getTableau().get(column2).get(i).getValue() + "(w" + i + ")");
+}
+} else {
+for (int i = 1; i < table.getTableau().get(0).size(); i++) {
+table.getConditions().add(table.getTableau().get(column).get(i).getValue() + operator
++ rightSide + "(w" + i + ")");
+}
+}
+
+} else {
+if (!table.getAttributes().contains(rightSide)) {
+for (int i = 1; i < table.getTableau().get(0).size(); i++) {
+table.getConditions().add(table.getTableau().get(column).get(i).getValue() + operator
++ rightSide + "(w" + i + ")");
+}
+} else {
+int column2 = table.getAttributes().indexOf(rightSide);
+for (int i = 1; i < table.getTableau().get(0).size(); i++) {
+table.getConditions().add(table.getTableau().get(column).get(i).getValue() + operator
++ table.getTableau().get(column2).get(i).getValue() + "(w" + i + ")");
+}
+}
+
+}
+}
+}
+return table;
+}
+
+private static String getOperator(String condition) {
+if (condition.contains("<=")) {
+return "<=";
+} else if (condition.contains(">=")) {
+return ">=";
+} else if (condition.contains("<")) {
+return "<";
+} else if (condition.contains(">")) {
+return ">";
+} else if (condition.contains("!=")) {
+return "!=";
+}else return "=";
+
+}
+
+public static boolean isInteger(String str) {
+try {
+Integer.parseInt(str);
+return true;
+} catch (NumberFormatException e) {
+return false;
+}
+}
+
+public static String getContent(int bracketIndex, String subquery) {
+int openBrackets = 1;
+String content = "";
+for (int i = bracketIndex; i < subquery.length(); i++) {
+if (subquery.charAt(i) == ('(')) {
+openBrackets++;
+} else if (subquery.charAt(i) == (')')) {
+openBrackets--;
+}
+
+if (openBrackets == 0) {
+content = subquery.substring(bracketIndex, i);
+return content;
+}
+}
+return null;
+}
+
+public static String getLeftside(String join) {
+String leftSide = "";
+if (containsOperator(join.substring(0, join.indexOf(",")))) {
+leftSide = join.substring(0, join.indexOf("(") + 1) + getContent(join.indexOf("(") + 1, join) + ")";
+} else
+leftSide = join.substring(0, join.indexOf(","));
+
+return leftSide;
+}
+
+private static boolean containsOperator(String substring) {
+String query = substring.toLowerCase();
+if (query.contains("project") || query.contains("select") || query.contains("join") || query.contains("unify")
+|| query.contains("difference")) {
+return true;
+}
+return false;
+}
+
+public static void main(String[] args) {
+
+// String query = "project BD (join( join( select A=B(project AS(R1)) , select
+// C<=1(project GB(selectB=A(selectC=D(project AB( join(R1,R2) )))) ) ) , R3 )
+// )";
+// 
+// List<Relation> relations = new ArrayList<Relation>();
+// Relation r1 = new Relation();
+// List<String> attributes1 = new ArrayList<String>();
+// List<String> universe = new ArrayList<String>();
+// universe.add("A");
+// universe.add("B");
+// universe.add("C");
+// universe.add("D");
+// universe.add("E");
+// universe.add("F");
+//
+// attributes1.add("A");
+// attributes1.add("B");
+// r1.setAttributes(attributes1);
+// r1.setName("R1");
+// Relation r2 = new Relation();
+// List<String> attributes2 = new ArrayList<String>();
+// attributes2.add("A");
+// attributes2.add("C");
+// r2.setAttributes(attributes2);
+// r2.setName("R2");
+// Relation r3 = new Relation();
+// List<String> attributes3 = new ArrayList<String>();
+// attributes3.add("A");
+// attributes3.add("D");
+// r3.setAttributes(attributes3);
+// r3.setName("R3");
+// Relation r4 = new Relation();
+// List<String> attributes4 = new ArrayList<String>();
+// attributes4.add("A");
+// attributes4.add("E");
+// r4.setAttributes(attributes4);
+// r4.setName("R4");
+// Relation r5 = new Relation();
+// List<String> attributes5 = new ArrayList<String>();
+// attributes5.add("A");
+// attributes5.add("F");
+// r5.setAttributes(attributes5);
+// r5.setName("R5");
+//
+// relations.add(r1);
+// relations.add(r2);
+// relations.add(r3);
+// relations.add(r4);
+// relations.add(r5);
+//
+// r1.setUniverse(universe);
+// r2.setUniverse(universe);
+// r3.setUniverse(universe);
+// r4.setUniverse(universe);
+// r5.setUniverse(universe);
+// 
+// 
+// List<Relation> relations = new ArrayList<Relation>();
+// Relation r1 = new Relation();
+// List<String> attributes1 = new ArrayList<String>();
+// List<String> universe = new ArrayList<String>();
+// universe.add("A");
+// universe.add("B");
+// universe.add("C");
+// universe.add("D");
+//
+// attributes1.add("A");
+// attributes1.add("B");
+// r1.setAttributes(attributes1);
+// r1.setName("R1");
+// Relation r2 = new Relation();
+// List<String> attributes2 = new ArrayList<String>();
+// attributes2.add("B");
+// attributes2.add("C");
+// r2.setAttributes(attributes2);
+// r2.setName("R2");
+// Relation r3 = new Relation();
+// List<String> attributes3 = new ArrayList<String>();
+// attributes3.add("A");
+// attributes3.add("D");
+// r3.setAttributes(attributes3);
+// r3.setName("R3");
+//
+// r1.setUniverse(universe);
+// r2.setUniverse(universe);
+// r3.setUniverse(universe);
+// relations.add(r1);
+// relations.add(r2);
+// relations.add(r3);
+
+// List<Relation> relations = new ArrayList<Relation>();
+// Relation r1 = new Relation();
+// List<String> attributes1 = new ArrayList<String>();
+// List<String> universe = new ArrayList<String>();
+// universe.add("A");
+// universe.add("B");
+// universe.add("C");
+//
+// attributes1.add("A");
+// attributes1.add("B");
+// attributes1.add("C");
+// r1.setAttributes(attributes1);
+// r1.setName("R1");
+// 
+// r1.setUniverse(universe);
+// 
+// relations.add(r1);
+
+List<Relation> relations = new ArrayList<Relation>();
+Relation r1 = new Relation();
+List<String> attributes1 = new ArrayList<String>();
+List<String> universe = new ArrayList<String>();
+universe.add("A");
+universe.add("B");
+universe.add("C");
+universe.add("D");
+universe.add("E");
+universe.add("F");
+
+attributes1.add("A");
+attributes1.add("B");
+r1.setAttributes(attributes1);
+r1.setName("R1");
+Relation r2 = new Relation();
+List<String> attributes2 = new ArrayList<String>();
+attributes2.add("A");
+attributes2.add("C");
+r2.setAttributes(attributes2);
+r2.setName("R2");
+Relation r3 = new Relation();
+List<String> attributes3 = new ArrayList<String>();
+attributes3.add("A");
+attributes3.add("D");
+r3.setAttributes(attributes3);
+r3.setName("R3");
+Relation r4 = new Relation();
+List<String> attributes4 = new ArrayList<String>();
+attributes4.add("D");
+attributes4.add("E");
+r4.setAttributes(attributes4);
+r4.setName("R4");
+Relation r5 = new Relation();
+List<String> attributes5 = new ArrayList<String>();
+attributes5.add("D");
+attributes5.add("F");
+r5.setAttributes(attributes5);
+r5.setName("R5");
+
+relations.add(r1);
+relations.add(r2);
+relations.add(r3);
+relations.add(r4);
+relations.add(r5);
+
+r1.setUniverse(universe);
+r2.setUniverse(universe);
+r3.setUniverse(universe);
+r4.setUniverse(universe);
+r5.setUniverse(universe);
+// List<Relation> relations = new ArrayList<Relation>();
+// List<String> universe = new ArrayList<String>();
+// universe.add("A");
+// universe.add("B");
+// universe.add("C");
+// universe.add("D");
+// 
+// 
+// Relation r1 = new Relation();
+// List<String> attributes1 = new ArrayList<String>();
+// attributes1.add("A");
+// attributes1.add("B");
+// attributes1.add("C");
+// r1.setAttributes(attributes1);
+// r1.setName("R1");
+// 
+// Relation r2 = new Relation();
+// List<String> attributes2 = new ArrayList<String>();
+// attributes2.add("A");
+// attributes2.add("B");
+// attributes2.add("D");
+// r2.setAttributes(attributes2);
+// r2.setName("R2");
+// 
+// r1.setUniverse(universe);
+// r2.setUniverse(universe);
+// 
+// relations.add(r1);
+// relations.add(r2);
+// 
+// List<Relation> relations = new ArrayList<Relation>();
+// List<String> universe = new ArrayList<String>();
+// universe.add("A");
+// universe.add("B");
+// universe.add("C");
+// universe.add("D");
+// universe.add("E");
+// universe.add("F");
+// 
+// 
+// Relation r1 = new Relation();
+// List<String> attributes1 = new ArrayList<String>();
+// attributes1.add("A");
+// attributes1.add("B");
+// attributes1.add("C");
+// r1.setAttributes(attributes1);
+// r1.setName("R1");
+// 
+// Relation r2 = new Relation();
+// List<String> attributes2 = new ArrayList<String>();
+// attributes2.add("D");
+// attributes2.add("E");
+// attributes2.add("F");
+// r2.setAttributes(attributes2);
+// r2.setName("R2");
+// 
+// r1.setUniverse(universe);
+// r2.setUniverse(universe);
+// 
+// relations.add(r1);
+// relations.add(r2);
+// IND ind1 = new IND(List.of("R1", "R2"), "A,D", true);
+// IND ind2 = new IND(List.of("R1", "R2"), "B,E", true);
+// List<IND> inds = new ArrayList<IND>();
+// inds.add(ind1);
+// inds.add(ind2);
+
+IND ind1 = new IND(List.of("R3", "R2", "R1"), "A", false);
+IND ind2 = new IND(List.of("R5", "R4", "R3"), "D", false);
+List<IND> inds = new ArrayList<IND>();
+inds.add(ind1);
+inds.add(ind2);
+// 
+// 
+List<FD> fds= new ArrayList<FD>();
+// List<String> jds = new ArrayList<String>();
+// 
+FD fd = new FD("A->B");
+fds.add(fd);
+// 
+// List<String> jd = new ArrayList<String>();
+// jd.add("AB,BC");
+// IND ind1 = new IND(List.of("R1", "R2", "R3", "R4", "R5"), "A");
+// List<IND> inds = new ArrayList<IND>();
+// inds.add(ind1);
+// 
+String query = "Unify(project BD(join( Select C < 2( S e l e c t C = B( R1)),R3)), project BD( join(Project A B(join( Select D<1(Select A < = 1(R3)), Sel ect C < = 1(R 1))),R 3)))";
+String query2 = "project BD(join( Unify( Select A=B(R1) , Project AB(Select C<=1  and A<1( join(R1,R2) ) ) ), R3 ) )";
+String queryB2s = "projectAB(Select not( F = 3 or D<10) ( Selectnot(B<D) ( join(R1,join(R2,project DF(join(R3,join(R4,R5))))))))";
+String queryB2 = "projectAB( project A(join(R1,project DF(join(R2,join(R3,join(R4,R5)))))))";
+String query4 = "projectA(join(R1,R2))";
+String query5 = "project BD(join( Unify( Select A=B and B<9 and A<12(R1) , Project AB(Select C<=1 and A>1 and B>4 ( join(R1,R2) ) ) ), R3 ) )";
+String c = "Unify(projectBD(join(SelectA=B(R1),R3)),projectBD(join(ProjectAB(join(SelectA=1 and B=2(R1),SelectC<=1(R2))),R3)))";
+String queryB1 = "join(projectAB(R1),projectBC(R1))";
+String queryIlvioTerei = "project BD(join( Unify( Select A=B(R1) , Project AB(Select C<=1( join(R1,R2) ) ) ), R3 ) )";
+QueryOptimizer s = new QueryOptimizer();
+String queryFrage = "project AB(  join( project AC(R1), R2 ))";
+String queryB2o = "projectAB(join(R1,join(R2,join(R3,join(R4,SelectF=10(R5))))))";
+String queryB3 = "project DE(join(project DE(R2),Select not( F = 3 and F<10)(projectDF(R2))))";
+// String g = s.optimizeQuery(queryB2o, relations);
+List<Tableau> x = translateQuery(s.optimizeQuery(queryB2, relations), relations);
+Sagiv sd = new Sagiv();
+ChaseAlgorithm chase = new ChaseAlgorithm();
+// System.out.println(s.removeFalseSelect(s.decompressSelect(queryB2), relations) );
+System.out.println(s.optimizeQuery(queryB2, relations));
+x.get(0).printTableau();
+// Tableau r = sd.sagiv(chase.enforceFD(x.get(0), fds, inds) ,inds);
+Tableau r = sd.sagiv(x.get(0),inds );
+r.printTableau();
+// Tableau sc = sd.sagiv(x.get(1),null);
+// sc.printTableau();
+// r = chase.enforceJD(r, jd);
+// r = sd.sagiv(r, null);
+
+// for(ArrayList<String> re : f) {
+// System.out.println();
+// for(String k : re) {
+// System.out.print(k +" ,");
+// }
+// }
+
+BackChase bc = new BackChase();
+
+// Tableau g = sd.sagiv(x.get(0));
+// System.out.println(s.optimizeQuery(query2, relations));
+// r.printTableau();
+r.printConditions();
+
+//int u =Tableau.getCounter();
+System.out.println(QueryOptimizer.ResolveNot(c));
+System.out.println(bc.backChase(r));
+r.printProjections();
+// System.out.println(bc.backChase(sc));
+// r.printTableau();
+// r.printConditions();
+// List<String> jd = new ArrayList<String>();
+// jd.add("AB,BC,CD");
+// jd.add("ABD,ACD");
+// ChaseAlgorithm chase = new ChaseAlgorithm();
+// chase.enforceJD(g, jd).printTableau();
+// List<String> stringfds = new ArrayList<String>();
+// stringfds.add("B,D->C");
+// stringfds.add("A,B->D");
+//// stringfds.add("R,K,V->H,D,Z");
+// List<FD> fds = chase.toFD(stringfds);
+// chase.enforceFD(g, fds).printTableau();
+//
+// x.get(0).printTableau();
+// x.get(0).printConditions();
+// x.get(1).printTableau();
+// x.get(1).printConditions();
+
+//
+// List<Tableau> tableaus = translateQuery(optimizeQuery(query, relations), relations);
+// for (Tableau tableau : tableaus) {
+// tableau.printTableau();
+// tableau.printAttributes();
+// tableau.printConditions();
+// }
+// System.out.println(getContent(17, query));
+// System.out.println(getLeftside("Unify( Selection A=B(R1) , Projection AB(Selection C<=1( join(R1,R2) ) ) ) , R3 "));
+// System.out.println(switchOperations("join( Unify( Selection A=B(R1)    ,     Projection AB(Selection C<=1( join(R1,R2) )   ) ) , R3    )    "));
+// System.out.println(switchOperations("project BD (Unify(join(Selection A=B(R1), R3),join( Projection AB(Selection C<=1(join(R1,R2))) , R3)))"));
+// System.out.println(getUpperOperation(query, getComplexOperator(query)));
+// System.out.println(getComplexOperator(query));
+// System.out.println(optimizeQuery(query));
+// List relation = new ArrayList<String>();
+// List relation2 = new ArrayList<String>();
+// List attributes = new ArrayList<String>();
+// List projetion = new ArrayList<String>();
+// List selction = new ArrayList<String>();
+//
+// selction.add("A=B");
+// selction.add("C=1");
+// selction.add("A<=C");
+// selction.add("C<8");
+//
+// projetion.add("A");
+// projetion.add("C");
+//
+// relation.add("A");
+// relation.add("B");
+// relation2.add("B");
+// relation2.add("C");
+//
+// attributes.add("A");
+// attributes.add("B");
+// attributes.add("C");
+// attributes.add("D");
+// Tableau table1 = relationToTableau(relation2, attributes, "R1");
+// Tableau table2 = relationToTableau(relation, attributes, "R2");
+// Tableau table3 = joinTableaus(table1, table2);
+// Tableau table4 = projectTableaus(table3, projetion);
+// Tableau table = selectTableaus(table4, selction);
+// table.printTableau();
+// table.printAttributes();
+// table.printConditions();
+}
+
+}
+
+

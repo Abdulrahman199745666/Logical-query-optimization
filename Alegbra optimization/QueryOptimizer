@@ -1,0 +1,647 @@
+package tableau;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class QueryOptimizer {
+
+private static String getComplexOperator(String query) {
+if (query.contains("Unify")) {
+return "Unify";
+} else if (query.contains("unify")) {
+return "unify";
+} else if (query.contains("difference")) {
+return "difference";
+} else if (query.contains("Difference")) {
+return "Difference";
+}
+return "";
+}
+
+public static String ResolveNot(String query) {
+String result = "";
+String notContent = "";
+while (query.contains("not")) {
+notContent = getContent(query.indexOf("not") + 4, query);
+if (notContent.contains("and")) {
+result = result + query.substring(0, query.indexOf("not"))
++ notContent
+.substring(0,
+notContent.indexOf(getOperator(notContent.substring(0,
+notContent.indexOf("and")))))
++ ResolveOperator(getOperator(notContent.substring(0, notContent.indexOf("and"))))
++ notContent.substring(
+notContent.indexOf(getOperator(notContent.substring(0, notContent.indexOf("and"))))
++ getOperator(notContent.substring(0, notContent.indexOf("and"))).length(),
+notContent.indexOf("and"))
++ "or"
++ notContent.substring(notContent.indexOf("and") + 3,
+notContent.lastIndexOf(getOperator(notContent.substring(notContent.indexOf("and")))))
++ ResolveOperator(getOperator(notContent.substring(notContent.indexOf("and"))))
++ notContent.substring(
+notContent.lastIndexOf(getOperator(notContent.substring(notContent.indexOf("and"))))
++ getOperator(notContent.substring(notContent.indexOf("and"))).length());
+query = ResolveNot(query.substring(
+query.indexOf("not") + 4 + getContent(query.indexOf("not") + 4, query).length() + 1));
+} else if (notContent.contains("or")) {
+result = result + query.substring(0, query.indexOf("not"))
++ notContent
+.substring(0,
+notContent.indexOf(getOperator(notContent.substring(0,
+notContent.indexOf("or")))))
++ ResolveOperator(getOperator(notContent.substring(0, notContent.indexOf("or"))))
++ notContent.substring(
+notContent.indexOf(getOperator(notContent.substring(0, notContent.indexOf("or"))))
++ getOperator(notContent.substring(0, notContent.indexOf("or"))).length(),
+notContent.indexOf("or"))
++ "and"
++ notContent.substring(notContent.indexOf("or") + 2,
+notContent.lastIndexOf(getOperator(notContent.substring(notContent.indexOf("or")))))
++ ResolveOperator(getOperator(notContent.substring(notContent.indexOf("or"))))
++ notContent.substring(
+notContent.lastIndexOf(getOperator(notContent.substring(notContent.indexOf("or"))))
++ getOperator(notContent.substring(notContent.indexOf("or"))).length());
+query = ResolveNot(query
+.substring(query.indexOf("not") + 5 + getContent(query.indexOf("not") + 4, query).length()));
+// System.out.println(query);
+} else {
+result = result + query.substring(0, query.indexOf("not"))
++ notContent.substring(0, notContent.indexOf(getOperator(notContent)))
++ ResolveOperator(getOperator(notContent)) + notContent.substring(
+notContent.indexOf(getOperator(notContent)) + getOperator(notContent).length());
+query = ResolveNot(query
+.substring(query.indexOf("not") + 5 + getContent(query.indexOf("not") + 4, query).length()));
+}
+}
+result = result + query;
+return result;
+}
+
+public static String ResolveOperator(String query) {
+if (query.contains(">=")) {
+return "<";
+} else if (query.contains(">")) {
+return "<=";
+} else if (query.contains("<=")) {
+return ">";
+} else if (query.contains("<")) {
+return ">=";
+} else if (query.contains("=")) {
+return "!=";
+} else
+return "=";
+
+}
+
+private static String getUpperOperation(String query, String complexOperator) {
+String upperOperation = "";
+int openBrackets = -1;
+for (int i = query.indexOf(complexOperator); i > 0; i--) {
+if (query.charAt(i) == ('(')) {
+// System.out.println(i + " (| " + openBrackets);
+openBrackets++;
+} else if (query.charAt(i) == (')')) {
+openBrackets--;
+}
+
+if (openBrackets == 0) {
+String x = query.substring(0, i);
+if (x.contains("(")) {
+upperOperation = getContent(x.lastIndexOf("(") + 1, query);
+
+} else
+upperOperation = query;
+}
+}
+return upperOperation;
+}
+
+/**
+* Sucht in der Anfrage nach komplexe Operatoren und führt sie als letzte
+* Operation aus. Ruft die folgenden Methoden auf: decompressSelect,
+* logiclyOptimizeQuery, removeFalseSelect
+* 
+* @param query:     Von Benutzer eingegebene relational algabrische Anfrage
+* @param relations: Ist die Liste aller in Universum enthaltenen Relationen
+* @return Liefert eine relational algebrische optimierte Anfrage
+*/
+public static String optimizeQuery(String query, List<Relation> relations) {
+
+String complexOperator = getComplexOperator(query);
+String optimizedQuery = query.replaceAll(" ", "");
+optimizedQuery = ResolveNot(optimizedQuery);
+optimizedQuery = decompressSelect(optimizedQuery);
+if (!complexOperator.equals("")) {
+while (optimizedQuery.indexOf(complexOperator) != 0) {
+String upperOperation = getUpperOperation(optimizedQuery, complexOperator);
+String subQuery = switchOperations(upperOperation, relations);
+optimizedQuery = optimizedQuery.substring(0, optimizedQuery.indexOf(upperOperation)) + subQuery
++ optimizedQuery.substring(optimizedQuery.indexOf(upperOperation) + upperOperation.length());
+
+}
+
+}
+
+String optimized = logiclyOptimizeQuery(optimizedQuery, relations);
+while (!optimized.equals(logiclyOptimizeQuery(optimized, relations))) {
+optimized = logiclyOptimizeQuery(optimized, relations);
+}
+optimized = removeFalseSelect(optimized, relations);
+while (!optimized.equals(removeFalseSelect(optimized, relations))) {
+optimized = removeFalseSelect(optimized, relations);
+}
+return optimized;
+}
+
+/**
+* Schiebt die Selektionen in den beiden Seiten der Verbund-Operator falls es
+* möglich ist.
+* 
+* @param query:     Von Benutzer eingegebene relational algabrische Anfrage
+* @param relations: Ist die Liste aller in Universum enthaltenen Relationen
+* @return liefert eine Anfrage der Form join(Select (...), Select(...))
+*/
+private static String logiclyOptimizeQuery(String query, List<Relation> relations) {
+int index = 0;
+String optimizedQuery = query;
+String subquery = query;
+while (subquery.contains("select")) {
+index = index + subquery.indexOf("select") + 6;
+subquery = optimizedQuery.substring(index);
+String selectOperator = optimizedQuery.substring(index - 6, index + subquery.indexOf("(")) + "("
++ getContent(index + subquery.indexOf("(") + 1, optimizedQuery) + ")";
+
+if (selectOperator.contains("join")) {
+String newSelectOperator = selectOperator;
+
+if (selectOperator.contains("join")) {
+newSelectOperator = switchSelect(newSelectOperator, relations);
+optimizedQuery = optimizedQuery.substring(0, index - 6) + newSelectOperator
++ optimizedQuery.substring(index - 6 + selectOperator.length());
+}
+
+}
+subquery = optimizedQuery.substring(index);
+}
+while (subquery.contains("Select")) {
+index = index + subquery.indexOf("Select") + 6;
+subquery = optimizedQuery.substring(index);
+String selectOperator = optimizedQuery.substring(index - 6, index + subquery.indexOf("(")) + "("
++ getContent(index + subquery.indexOf("(") + 1, optimizedQuery) + ")";
+if (selectOperator.contains("join")) {
+
+String newSelectOperator = selectOperator;
+if (selectOperator.contains("join")) {
+newSelectOperator = switchSelect(newSelectOperator, relations);
+optimizedQuery = optimizedQuery.substring(0, index - 6) + newSelectOperator
++ optimizedQuery.substring(index - 6 + selectOperator.length());
+}
+
+}
+subquery = optimizedQuery.substring(index);
+}
+
+return optimizedQuery;
+}
+
+private static String switchSelect(String query, List<Relation> relations) {
+String optimizedQuery = query;
+String firstOperation = getContent(optimizedQuery.indexOf("(") + 1, optimizedQuery).substring(0,
+getContent(optimizedQuery.indexOf("(") + 1, optimizedQuery).indexOf("("));
+if (firstOperation.contains("join")) {
+return switchSelectOrProject(query, relations);
+} else {
+String select = query.substring(0, query.indexOf("("));
+String selectContent = getContent(query.indexOf("(") + 1, query);
+optimizedQuery = selectContent.substring(0, selectContent.indexOf("(")) + "(" + select + "("
++ getContent(selectContent.indexOf("(") + 1, selectContent) + "))";
+}
+return optimizedQuery;
+}
+
+public static String switchOperations(String query, List<Relation> relations) {
+String switchedQuery = "";
+String firstOperation = query.substring(0, query.indexOf("("));
+if (firstOperation.contains("join")) {
+String joinContent = getContent(query.indexOf("(") + 1, query);
+String leftSide = getLeftside(joinContent);
+String rightSide = joinContent.substring(leftSide.length() + 1);
+
+if (containsOperator(leftSide)) {
+if (leftSide.substring(0, leftSide.indexOf("(")).contains("Unify")
+|| leftSide.substring(0, leftSide.indexOf("(")).contains("unify")
+|| leftSide.substring(0, leftSide.indexOf("(")).contains("Difference")
+|| leftSide.substring(0, leftSide.indexOf("(")).contains("difference")) {
+return switchJoin(leftSide, rightSide);
+
+}
+} else if (containsOperator(rightSide)) {
+if (rightSide.substring(0, rightSide.indexOf("(")).contains("Unify")
+|| rightSide.substring(0, rightSide.indexOf("(")).contains("unify")
+|| rightSide.substring(0, rightSide.indexOf("(")).contains("Difference")
+|| rightSide.substring(0, rightSide.indexOf("(")).contains("difference")) {
+return switchJoin(rightSide, leftSide);
+
+}
+}
+} else {
+return switchSelectOrProject(query, relations);
+}
+
+return switchedQuery;
+}
+
+private static String switchSelectOrProject(String query, List<Relation> relations) {
+String innerOperation = getContent(query.indexOf("(") + 1, query);
+String complexOperator = getComplexOperator(query);
+if (complexOperator.equals("")) {
+if (getSelectAttributes(query, relations.get(0).getUniverse()) != null || query.substring(0, query.indexOf("(")).contains("or")) {
+List<String> selectAttributes = getSelectAttributes(query, relations.get(0).getUniverse());
+String canInsert = canInsertSelect(innerOperation, relations, selectAttributes);
+if (canInsert.equals("both")) {
+String leftSide = getLeftside(getContent(innerOperation.indexOf("(") + 1, innerOperation));
+String rightSide = innerOperation.substring(innerOperation.indexOf("(") + leftSide.length());
+rightSide = rightSide.substring(rightSide.indexOf(",") + 1, rightSide.lastIndexOf(")"));
+
+leftSide = query.substring(0, query.indexOf("(") + 1) + leftSide + ")";
+rightSide = query.substring(0, query.indexOf("(") + 1) + rightSide + ")";
+return innerOperation.substring(0, innerOperation.indexOf("(") + 1) + leftSide + "," + rightSide
++ ")";
+} else if (canInsert.equals("left")) {
+String leftSide = getLeftside(getContent(innerOperation.indexOf("(") + 1, innerOperation));
+String rightSide = innerOperation.substring(innerOperation.indexOf("(") + leftSide.length());
+rightSide = rightSide.substring(rightSide.indexOf(",") + 1, rightSide.lastIndexOf(")"));
+leftSide = query.substring(0, query.indexOf("(") + 1) + leftSide + ")";
+return innerOperation.substring(0, innerOperation.indexOf("(") + 1) + leftSide + "," + rightSide
++ ")";
+} else if (canInsert.equals("right")) {
+String leftSide = getLeftside(getContent(innerOperation.indexOf("(") + 1, innerOperation));
+String rightSide = innerOperation.substring(innerOperation.indexOf("(") + leftSide.length());
+rightSide = rightSide.substring(rightSide.indexOf(",") + 1, rightSide.lastIndexOf(")"));
+
+rightSide = query.substring(0, query.indexOf("(") + 1) + rightSide + ")";
+return innerOperation.substring(0, innerOperation.indexOf("(") + 1) + leftSide + "," + rightSide
++ ")";
+} else
+return query;
+} else {
+String leftSide = getLeftside(getContent(innerOperation.indexOf("(") + 1, innerOperation));
+String rightSide = innerOperation.substring(innerOperation.indexOf("(") + leftSide.length());
+rightSide = rightSide.substring(rightSide.indexOf(",") + 1, rightSide.lastIndexOf(")"));
+
+leftSide = query.substring(0, query.indexOf("(") + 1) + leftSide + ")";
+rightSide = query.substring(0, query.indexOf("(") + 1) + rightSide + ")";
+return innerOperation.substring(0, innerOperation.indexOf("(") + 1) + leftSide + "," + rightSide + ")";
+}
+
+} else {
+String leftSide = getLeftside(getContent(innerOperation.indexOf("(") + 1, innerOperation));
+String rightSide = innerOperation.substring(innerOperation.indexOf("(") + leftSide.length());
+rightSide = rightSide.substring(rightSide.indexOf(",") + 1, rightSide.lastIndexOf(")"));
+
+leftSide = query.substring(0, query.indexOf("(") + 1) + leftSide + ")";
+rightSide = query.substring(0, query.indexOf("(") + 1) + rightSide + ")";
+return innerOperation.substring(0, innerOperation.indexOf("(") + 1) + leftSide + "," + rightSide + ")";
+}
+
+}
+
+private static String switchJoin(String operation, String joinSide) {
+String newOperation = operation.substring(0, operation.indexOf("(") + 1);
+
+String leftSide = getLeftside(getContent(operation.indexOf("(") + 1, operation));
+String rightSide = operation.substring(operation.indexOf("(") + leftSide.length());
+rightSide = rightSide.substring(rightSide.indexOf(",") + 1, rightSide.lastIndexOf(")"));
+
+leftSide = "join(" + leftSide + "," + joinSide + ")";
+rightSide = "join(" + rightSide + "," + joinSide + ")";
+newOperation = newOperation + leftSide + "," + rightSide + ")";
+return newOperation;
+}
+
+/**
+* Entfernt überflüssige Selektionen der Form (Select C<D(Ri)), die nicht in den
+* Relationen enthalten sind und ruft die Methode removeOuterSelect auf
+* 
+* @param query:     Von Benutzer eingegebene relational algabrische Anfrage
+* @param relations: Ist die Liste aller in Universum enthaltenen Relationen
+* @return Liefert ein relational algabrische Anfrage, ohne überflüssige
+*         Selektion-Operatoren der Form (Select C<D(Ri))
+*/
+public static String removeFalseSelect(String query, List<Relation> relations) {
+int index = 0;
+query = query.replaceAll(" ", "");
+for (int i = 0; i < query.indexOf("("); i++) {
+if (query.charAt(i) == ',' || query.charAt(i) == ')' || query.charAt(i) == ' ') {
+index = index + 1;
+
+}
+}
+String selectAtt = "";
+if (containsOperator(query) == false) {
+return query;
+}
+
+else if (!query.substring(0, query.indexOf("(")).contains("Select")) {
+return query.substring(0, query.indexOf("(")) + "("
++ removeFalseSelect(query.substring(query.indexOf("(") + 1), relations);
+} else if (query.substring(0, query.indexOf("(")).contains("Select")
+&& query.substring(0, query.indexOf("(")).contains("or")) {
+return query.substring(0, query.indexOf("(")) + "("
++ removeFalseSelect(query.substring(query.indexOf("(") + 1), relations);
+} else if (query.substring(0, query.indexOf("(")).contains("Select")) {
+if (query.substring(query.indexOf("(") + 1, query.indexOf("(") + 2).equals("R")) {
+selectAtt = query.substring(query.indexOf("Select") + 6,
+query.indexOf(getOperator(query.substring(0, query.indexOf("(")))));
+if (selectAtt.length() > 1) {
+selectAtt = selectAtt.substring(1);
+}
+int relationIndex = getindex(getContent(query.indexOf("R"), query), relations);
+if (isIn(selectAtt, relations.get(relationIndex))) {
+return query.substring(0, query.indexOf("(")) + "(" + getContent(query.indexOf("(") + 1, query)
++ ")"
++ removeFalseSelect(query.substring(
+query.indexOf("(") + 1 + getContent(query.indexOf("(") + 1, query).length() + 1),
+relations);
+} else {
+
+return query.substring(0, index) + getContent(query.indexOf("(") + 1, query)
++ removeFalseSelect(query.substring(
+query.indexOf("(") + 1 + getContent(query.indexOf("(") + 1, query).length() + 1),
+relations);
+}
+
+} else {
+return removeOuterSelect(query, relations);
+}
+
+}
+return query;
+}
+
+/**
+* wandelt aller substring der Form (Select F<B and A=10(...)) in der Form
+* (Select F<B(Select A=10(....))) um
+* 
+* @param query: Von Benutzer eingegebene relational algabrische Anfrage
+* @return liefert eine Anfrage mit speziellen Syntax zurück
+*/
+public static String decompressSelect(String query) {
+String resultQuery = query.replaceAll(" ", "");
+while (resultQuery.contains("and")) {
+
+int index = resultQuery.lastIndexOf("and");
+resultQuery = resultQuery.substring(0, index) + "(" + "Select"
++ resultQuery.substring(index + 3, resultQuery.substring(index).indexOf("(") + index) + "("
++ getContent(resultQuery.substring(index).indexOf("(") + index + 1, resultQuery) + ")"
++ resultQuery.substring(resultQuery.substring(index)
+.indexOf(getContent(resultQuery.substring(index).indexOf("(") + index + 1, resultQuery))
++ getContent(resultQuery.substring(index).indexOf("(") + 1 + index, resultQuery).length()
++ index);
+}
+
+return resultQuery;
+}
+
+/**
+* Entfernt überflüssige Selektionen der Form (Select A<B(Select C<D(Ri))), die
+* nicht in den Relationen enthalten sind
+* 
+* @param query:     Von Benutzer eingegebene relational algabrische Anfrage
+* @param relations: Ist die Liste aller in Universum enthaltenen Relationen
+* @return Liefert eine relational algabrische Anfrage ohne überflüssige
+*         Selektionen der Form (Select A<B(Select C<D(Ri)))
+*/
+public static String removeOuterSelect(String query, List<Relation> relations) {
+int relationIndex = getindex(getContent(query.indexOf("R"), query), relations);
+String selectAtt = query.substring(query.indexOf("Select") + 6,
+query.indexOf(getOperator(query.substring(0, query.indexOf("(")))));
+String rightSelect = query.substring(query.indexOf(getOperator(query.substring(0, query.indexOf("("))))
++ getOperator(query.substring(0, query.indexOf("("))).length(), query.indexOf("("));
+if (relations.get(0).getUniverse().contains(rightSelect)) {
+return query.substring(0, query.indexOf("("))
++ removeFalseSelect(query.substring(query.indexOf("(")), relations);
+}
+if (isIn(selectAtt, relations.get(relationIndex))) {
+return query.substring(0, query.indexOf("(")) + "("
++ removeFalseSelect(query.substring(query.indexOf("(") + 1), relations);
+} else {
+return query.substring(0, query.indexOf("S"))
++ removeFalseSelect(query.substring(query.indexOf(getContent(query.indexOf("(") + 1, query)),
+query.indexOf(getContent(query.indexOf("(") + 1, query))
++ getContent(query.indexOf("(") + 1, query).length())
++ query.substring(query.indexOf(getContent(query.indexOf("(") + 1, query))
++ getContent(query.indexOf("(") + 1, query).length() + 1),
+relations);
+}
+
+}
+
+public static boolean isJoin(String query) {
+String lowerCaseQuery = query.toLowerCase();
+if (lowerCaseQuery.substring(0, lowerCaseQuery.indexOf("(")).contains("join")) {
+return true;
+}
+return false;
+}
+
+public static boolean isProject(String query) {
+String lowerCaseQuery = query.toLowerCase();
+if (lowerCaseQuery.substring(0, lowerCaseQuery.indexOf("(")).contains("project")) {
+return true;
+}
+return false;
+}
+
+public static boolean isSelect(String query) {
+String lowerCaseQuery = query.toLowerCase();
+if (lowerCaseQuery.substring(0, lowerCaseQuery.indexOf("(")).contains("select")) {
+return true;
+}
+return false;
+}
+
+public static boolean isRelation(String query) {
+List<String> operators = new ArrayList<String>();
+operators.add("select");
+operators.add("project");
+operators.add("join");
+operators.add("unify");
+operators.add("difference");
+String lowerCaseQuery = query.toLowerCase();
+
+for (String operator : operators) {
+if (lowerCaseQuery.contains(operator)) {
+return false;
+}
+}
+return true;
+}
+
+public static List<String> getInnerAttributes(String query, List<Relation> relations,
+List<String> knownAttributes) {
+List<String> attributes = new ArrayList<String>();
+if (knownAttributes != null) {
+attributes = knownAttributes;
+}
+if (isRelation(query)) {
+for (Relation relation : relations) {
+if (relation.getName().equals(query)) {
+for (String att : relation.getAttributes()) {
+if (!attributes.contains(att)) {
+attributes.add(att);
+}
+}
+
+}
+}
+} else if (isSelect(query) || isProject(query)) {
+attributes = (getInnerAttributes(getContent(query.indexOf("(") + 1, query), relations, attributes));
+} else {
+String leftside = getLeftside(getContent(query.indexOf("(") + 1, query));
+String rightside = getContent(query.indexOf("(") + 1, query).substring(leftside.length() + 1);
+attributes = (getInnerAttributes(leftside, relations, attributes));
+attributes = (getInnerAttributes(rightside, relations, attributes));
+}
+return attributes;
+}
+
+public static String getContent(int bracketIndex, String subquery) {
+int openBrackets = 1;
+String content = "";
+for (int i = bracketIndex; i < subquery.length(); i++) {
+if (subquery.charAt(i) == ('(')) {
+openBrackets++;
+} else if (subquery.charAt(i) == (')')) {
+openBrackets--;
+}
+
+if (openBrackets == 0) {
+content = subquery.substring(bracketIndex, i);
+return content;
+}
+}
+return null;
+}
+
+public static List<String> getSelectAttributes(String query, List<String> universe) {
+List<String> attributes = new ArrayList<String>();
+String subquery = query.substring(0,query.indexOf("("));
+if (subquery.contains("or")) {
+String leftSel = query.substring(6, query.indexOf("or"));
+String leftOperator = getOperator(leftSel);
+attributes.add(leftSel.substring(0, leftSel.indexOf(leftOperator)));
+if (universe.contains(leftSel.substring(leftSel.indexOf(leftOperator) + leftOperator.length()))) {
+attributes.add(leftSel.substring(leftSel.indexOf(leftOperator) + leftOperator.length()));
+}
+String rightSel = query.substring(query.indexOf("or") + 2, query.indexOf("("));
+String rightOperator = getOperator(rightSel);
+attributes.add(rightSel.substring(0, rightSel.indexOf(rightOperator)));
+if (universe.contains(rightSel.substring(rightSel.indexOf(rightOperator) + rightOperator.length()))) {
+attributes.add(rightSel.substring(rightSel.indexOf(rightOperator) + rightOperator.length()));
+}
+
+} else {
+String leftside = query.substring(6, query.indexOf(getOperator(query.substring(0, query.indexOf("(")))));
+if (leftside.length() > 1) {
+leftside = leftside.substring(1);
+}
+String rightside = query.substring(query.indexOf(getOperator(query.substring(0, query.indexOf("("))))
++ getOperator(query.substring(0, query.indexOf("("))).length(), query.indexOf("("));
+attributes.add(leftside);
+attributes.add(rightside);
+if (!universe.contains(rightside)) {
+return null;
+}
+}
+return attributes;
+
+}
+
+public static String canInsertSelect(String query, List<Relation> relations, List<String> attributes) {
+String leftSide = getLeftside(getContent(query.indexOf("(") + 1, query));
+String rightSide = getContent(query.indexOf("(") + 1, query).substring(leftSide.length() + 1);
+List<String> leftSideAttributes = getInnerAttributes(leftSide, relations, null);
+List<String> rightSideAttributes = getInnerAttributes(rightSide, relations, null);
+boolean right = true;
+boolean left = true;
+for (String att : attributes) {
+if (!leftSideAttributes.contains(att)) {
+left = false;
+break;
+}
+}
+for (String att : attributes) {
+if (!rightSideAttributes.contains(att)) {
+right = false;
+break;
+}
+}
+if (right && left) {
+return "both";
+} else if (right) {
+return "right";
+} else if (left) {
+return "left";
+} else
+return "none";
+}
+
+private static String getOperator(String condition) {
+if (condition.contains("<=")) {
+return "<=";
+} else if (condition.contains(">=")) {
+return ">=";
+} else if (condition.contains("<")) {
+return "<";
+} else if (condition.contains(">")) {
+return ">";
+} else if(condition.contains("!=")) {
+return "!=";
+}else 
+return "=";
+
+}
+
+public static int getindex(String x, List<Relation> relations) {
+for (int i = 0; i < relations.size(); i++) {
+if (relations.get(i).getName().contains(x)) {
+return i;
+}
+
+}
+return 4;
+}
+
+public static boolean isIn(String selectOperator, Relation relation) {
+for (String att : relation.getAttributes()) {
+// System.out.println(att);
+if (att.contains(selectOperator)) {
+return true;
+}
+
+}
+return false;
+}
+
+public static String getLeftside(String join) {
+String leftSide = "";
+if (containsOperator(join.substring(0, join.indexOf(",")))) {
+leftSide = join.substring(0, join.indexOf("(") + 1) + getContent(join.indexOf("(") + 1, join) + ")";
+} else
+leftSide = join.substring(0, join.indexOf(","));
+
+return leftSide;
+}
+
+private static boolean containsOperator(String substring) {
+if (substring.contains("project") || substring.contains("select") || substring.contains("join")
+|| substring.contains("unify") || substring.contains("difference") || substring.contains("Project")
+|| substring.contains("Select") || substring.contains("Join") || substring.contains("Unify")
+|| substring.contains("Difference")) {
+return true;
+}
+return false;
+}
+
+}

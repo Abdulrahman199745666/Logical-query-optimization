@@ -1,0 +1,34 @@
+package tableau;
+
+import java.util.List;
+
+public class Relation {
+	private String name;
+	private List<String> attributes;
+	private List<String> universe;
+
+	public List<String> getAttributes() {
+		return attributes;
+	}
+
+	public void setAttributes(List<String> attributes) {
+		this.attributes = attributes;
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	public void setName(String name) {
+		this.name = name;
+	}
+
+	public List<String> getUniverse() {
+		return universe;
+	}
+
+	public void setUniverse(List<String> universe) {
+		this.universe = universe;
+	}
+
+}

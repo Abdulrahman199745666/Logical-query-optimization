@@ -1,0 +1,56 @@
+package tableau;
+
+public class OverlapingCondition {
+private int startRow;
+private int endRow;
+private String leftSide;
+private String rightSide;
+private String operator;
+private String originalCondition;
+public OverlapingCondition(int startRow, int endRow, String leftSide, String rightSide, String operator, String originalCOndition) {
+super();
+this.startRow = startRow;
+this.endRow = endRow;
+this.leftSide = leftSide;
+this.rightSide = rightSide;
+this.operator = operator;
+this.originalCondition = originalCOndition;
+}
+public int getStartRow() {
+return startRow;
+}
+public void setStartRow(int startRow) {
+this.startRow = startRow;
+}
+public int getEndRow() {
+return endRow;
+}
+public void setEndRow(int endRow) {
+this.endRow = endRow;
+}
+public String getLeftSide() {
+return leftSide;
+}
+public void setLeftSide(String leftSide) {
+this.leftSide = leftSide;
+}
+public String getRightSide() {
+return rightSide;
+}
+public void setRightSide(String rightSide) {
+this.rightSide = rightSide;
+}
+public String getOperator() {
+return operator;
+}
+public void setOperator(String operator) {
+this.operator = operator;
+}
+public String getOriginalCondition() {
+return originalCondition;
+}
+public void setOriginalCondition(String originalCondition) {
+this.originalCondition = originalCondition;
+}
+
+}

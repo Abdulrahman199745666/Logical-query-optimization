@@ -31,7 +31,9 @@ List<QElement> elements = new ArrayList<QElement>();
 for (OverlapingCondition condition : conditions) {
 table.getConditions().remove(condition.getOriginalCondition());
 }
-
+if(table.getTableau().get(0).size()==2) {
+table.setProjections(new ArrayList<>());
+}
 for (int i = 1; i < table.getTableau().get(0).size(); i++) {
 elements.add(new QElement(translateRow(table, i), false, 0));
 }
@@ -39,14 +41,12 @@ elements = addOCs(elements, conditions);
 elements = addProjections(elements, table);
 resultQuery = listToString(elements);
 resultQuery = getResultProjection(table) + "(" + resultQuery + ")";
-//System.out.println(resultQuery);
+System.out.println(resultQuery);
 return removeUnessesryProjection(resultQuery, table.getRelations());
 }
 
 private static void fixProjections(Tableau table) {
-	//System.out.println(table.getProjections().get(1));
-	List<String> tahseen = new ArrayList<String>(table.getProjections());
-for(String projection : tahseen) {
+for(String projection : table.getProjections()) {
 if(projection.indexOf("w")!=projection.lastIndexOf("w")) {
 int start = Integer.valueOf(projection.substring(projection.indexOf("w")+1, projection.indexOf(",")));
 int end = Integer.valueOf(projection.substring(projection.lastIndexOf("w")+1, projection.indexOf(")")));
@@ -64,25 +64,21 @@ for(String pro: table.getProjections()) {
 if(pro.indexOf("w")!=pro.lastIndexOf("w")) {
 int start = Integer.valueOf(pro.substring(pro.indexOf("w")+1, pro.indexOf(",")));
 int end = Integer.valueOf(pro.substring(pro.lastIndexOf("w")+1, pro.indexOf(")"))); 
-int count = 2;
+int count = 1;
 int index = 0;
 for(QElement element : elements) {
 if(!element.isSelect()) {
 if(count> start) {
 index = elements.indexOf(element);
-//System.out.println(index);
 break;
 }else count ++;
 }
-
 }elements.add(index, new QElement("project"+ pro.substring(0, pro.indexOf("("))+"(", true, 0));
 count = 1;
-
 for (QElement element : elements) {
 if(!element.isSelect()) {
 if(count == end) {
 index = elements.indexOf(element);
-
 break;
 }else count ++;
 }
@@ -106,7 +102,7 @@ resultQuery += ")";
 } else if (!element.isSelect() && elements.indexOf(element) < elements.size() - 1) {
 if (isFirstRelation(element, elements) || elements.get(elements.indexOf(element) - 1).isSelect()) {
 resultQuery += "join(";
-}else 
+} else
 resultQuery += ",join(";
 resultQuery += element.getValue();
 } else {
@@ -461,5 +457,3 @@ return charList;
 // }
 // } else resultQuery = translateRow(table, i);}
 }
-
-
